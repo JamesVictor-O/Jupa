@@ -1,0 +1,20 @@
+{
+  "name": "jupa",
+  "private": true,
+  "packageManager": "pnpm@10.33.1",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:indexer": "pnpm --filter indexer dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm test:contracts",
+    "test:contracts": "cd contracts && forge test",
+    "db:up": "docker compose up -d postgres",
+    "db:push": "pnpm --filter @jupa/db push",
+    "db:studio": "pnpm --filter @jupa/db studio"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
