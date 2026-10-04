@@ -1,26 +1,228 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Jupa palette (see /brand.md). The marketing surface commits to the light look
+ * from the reference design; app screens can add a dark theme later.
+ */
+@theme {
+  --color-canvas: #f1f2ef;
+  --color-surface: #ffffff;
+  --color-ink: #0e0e12;
+  --color-ink-soft: #1c1c22;
+  --color-muted: #62665f; /* 5.4:1 on canvas */
+  --color-line: #e3e5e0;
+  --color-mint: #bde7c3;
+  --color-mint-strong: #8fd39b;
+  --color-mint-ink: #12341a;
+  --color-lilac: #c9b8f5;
+  --color-coral: #f2a39a; /* friction / failure, used sparingly */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-display: var(--font-syne);
+  --font-sans: var(--font-syne);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --shadow-float: 0 40px 80px -24px rgb(14 14 18 / 0.35), 0 12px 24px -12px rgb(14 14 18 / 0.25);
+  --shadow-pill: 0 10px 30px -12px rgb(14 14 18 / 0.18);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-enter {
+    animation: demo-enter 420ms var(--ease-out-quint) both;
+  }
+  .demo-pop {
+    animation: demo-pop 520ms var(--ease-out-quint) both;
+  }
+  .demo-scan {
+    animation: demo-scan 1.6s ease-in-out infinite;
+  }
+  .demo-spin {
+    animation: spin 0.9s linear infinite;
+  }
+  .demo-caret {
+    animation: caret 1s steps(1) infinite;
+  }
+  .till-flash {
+    animation: till-flash 6s linear infinite;
+  }
+  .horizon-ripple {
+    animation: horizon-ripple 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite both;
+  }
+  .till-amount {
+    animation: till-amount 7.2s linear infinite;
+  }
+  .till-qr {
+    animation: till-qr 7.2s linear infinite;
+  }
+  .till-paid {
+    animation: till-paid 7.2s linear infinite;
+  }
+  .ticker {
+    animation: ticker 40s linear infinite;
+  }
+  .ticker-mask:hover .ticker {
+    animation-play-state: paused;
+  }
+  .float-slow {
+    animation: float 7s ease-in-out infinite;
+  }
+}
+
+/* Hidden unless the ripple animation runs (reduced motion shows the static rings only). */
+.horizon-ripple {
+  opacity: 0;
+}
+
+/* Event stall tills: Paid is the resting state; the loop below runs only with motion allowed. */
+.till-amount,
+.till-qr {
+  opacity: 0;
+}
+.ticker-mask {
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+/* Scroll-driven reveal: CSS only, skipped where unsupported or motion is reduced. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+
+@keyframes demo-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes demo-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+@keyframes demo-scan {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(150px);
+  }
+}
+@keyframes till-flash {
+  0%,
+  79%,
+  100% {
+    background-color: var(--color-surface);
+  }
+  81%,
+  95% {
+    background-color: var(--color-mint-strong);
+  }
+}
+@keyframes horizon-ripple {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(4.2);
+    opacity: 0;
+  }
+}
+@keyframes till-amount {
+  0%,
+  30% {
+    opacity: 1;
+  }
+  33%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes till-qr {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  33%,
+  60% {
+    opacity: 1;
+  }
+  63%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes till-paid {
+  0%,
+  60% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  64% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  96% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ticker {
+  to {
+    transform: translateX(calc(-50% - 0.375rem));
+  }
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(8deg);
+  }
+}
+
+/* Printing from onboarding: only the QR poster. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-poster,
+  #print-poster * {
+    visibility: visible;
+  }
+  #print-poster {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
+    box-shadow: none;
+  }
 }
