@@ -2,16 +2,45 @@ import { bigint, boolean, index, pgEnum, pgTable, text, timestamp } from "drizzl
 import { CHARGE_STATUSES } from "@jupa/shared";
 
 export const chargeStatus = pgEnum("charge_status", CHARGE_STATUSES);
+export const registryStatus = pgEnum("registry_status", ["pending", "registered", "failed"]);
 export const sourceChain = pgEnum("source_chain", ["arc", "base", "ethereum", "arbitrum", "solana"]);
+
+/**
+ * A merchant account. Identity is the Circle user id, verified server-side from a Circle
+ * userToken. Email is what they typed at sign-in, kept for display only (Circle doesn't return it).
+ */
+export const merchants = pgTable("merchants", {
+  id: text("id").primaryKey(),
+  circleUserId: text("circle_user_id").notNull().unique(),
+  email: text("email"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Opaque session cookies; only the SHA-256 of the token is stored. */
+export const sessions = pgTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  merchantId: text("merchant_id")
+    .notNull()
+    .references(() => merchants.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Mirror of the onchain registry plus offchain profile. payoutAddress is a cache; the registry is the truth. */
 export const stores = pgTable("stores", {
-  id: text("id").primaryKey(), // bytes32 hex, matches registry storeId
+  id: text("id").primaryKey(), // short public id used in URLs and QR codes
+  /** keccak256 of the public id; the key in StoreRegistry. */
+  registryId: text("registry_id").notNull().unique(),
+  merchantId: text("merchant_id")
+    .notNull()
+    .unique() // one store per merchant in v1
+    .references(() => merchants.id),
   name: text("name").notNull(),
   logoUrl: text("logo_url"),
-  ownerEmail: text("owner_email").notNull(),
   payoutAddress: text("payout_address").notNull(),
+  registryStatus: registryStatus("registry_status").notNull().default("pending"),
   registryTxHash: text("registry_tx_hash"),
+  registryError: text("registry_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -46,6 +75,7 @@ export const payments = pgTable("payments", {
   finalizedAt: timestamp("finalized_at", { withTimezone: true }),
 });
 
+export type Merchant = typeof merchants.$inferSelect;
 export type Store = typeof stores.$inferSelect;
 export type Charge = typeof charges.$inferSelect;
 export type Payment = typeof payments.$inferSelect;

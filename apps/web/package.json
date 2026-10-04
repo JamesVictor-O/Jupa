@@ -10,6 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@circle-fin/user-controlled-wallets": "^10.8.1",
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@jupa/db": "workspace:*",
     "@jupa/shared": "workspace:*",
     "next": "16.3.8",
