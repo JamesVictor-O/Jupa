@@ -1,14 +1,33 @@
-/**
- * F4-F6: customer checkout. Store, price, Connect, one Pay button.
- * Copy rule: say Pay / Paying / Paid. Never Bridge, Mint, Attest or chain names,
- * except one small line showing which balance was used.
- */
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { charges, eq, stores } from "@jupa/db";
+import { formatUsd, type ArcNetwork } from "@jupa/shared";
+import { Checkout } from "@/components/checkout/checkout";
+import { crosschainReceiver } from "@/lib/crosschain";
+import { db } from "@/lib/db";
+
+export const metadata: Metadata = { title: "Pay · Jupa" };
+
 export default async function CheckoutPage(props: PageProps<"/pay/[chargeId]">) {
   const { chargeId } = await props.params;
-  return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6">
-      <p className="text-sm text-zinc-500">Charge {chargeId}</p>
-      {/* TODO(F4): store + price, wallet connect, routing, Pay $X, Paying progress */}
-    </main>
-  );
+  const [record] = await db
+    .select({
+      id: charges.id,
+      amount: charges.amount,
+      status: charges.status,
+      expiresAt: charges.expiresAt,
+      storeName: stores.name,
+      payoutAddress: stores.payoutAddress,
+      registryId: stores.registryId,
+      reference: charges.reference,
+    })
+    .from(charges)
+    .innerJoin(stores, eq(stores.id, charges.storeId))
+    .where(eq(charges.id, chargeId))
+    .limit(1);
+  if (!record) notFound();
+  const network = ((process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet") === "mainnet" ? "Arc" : "Arc testnet";
+  const crosschainRecipient = await crosschainReceiver(record.registryId as `0x${string}`, record.reference as `0x${string}`);
+
+  return <Checkout charge={{ id: record.id, status: record.status, storeName: record.storeName, payoutAddress: record.payoutAddress, amountLabel: formatUsd(record.amount), amount: record.amount.toString(), expiresAt: record.expiresAt.toISOString(), network, crosschainRecipient }} circleAppId={process.env.NEXT_PUBLIC_CIRCLE_APP_ID} googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID} />;
 }

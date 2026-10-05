@@ -3,7 +3,7 @@ import postgres from "postgres";
 import * as schema from "./schema";
 
 export * from "./schema";
-export { and, desc, eq, gte, sql } from "drizzle-orm";
+export { and, desc, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
 
 export function createDb(url = process.env.DATABASE_URL) {
   if (!url) throw new Error("DATABASE_URL is not set");
