@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/art";
-import { ReceiptLookup } from "./receipt-lookup";
 
 const LINKS = [
   { href: "#how-it-works", label: "How it works" },
@@ -39,12 +38,10 @@ export function SiteNav() {
         </ul>
       </nav>
 
-      <ReceiptLookup className="ml-auto hidden w-full max-w-md lg:block" />
-
       <Link
         href="/dashboard"
         aria-label="Merchant sign in"
-        className="ml-auto grid size-14 shrink-0 place-items-center rounded-full bg-ink text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink lg:ml-6"
+        className=" grid size-14 shrink-0 place-items-center rounded-full bg-ink text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink lg:ml-6"
       >
         <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />

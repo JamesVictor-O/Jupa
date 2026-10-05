@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Horizon, LogoMark, OctagonField, Sparkle } from "@/components/art";
+import { Horizon, OctagonField, Sparkle } from "@/components/art";
 import { PhoneDemo } from "./phone-demo";
 import { SiteNav } from "./site-nav";
 
@@ -31,13 +31,6 @@ export function Hero() {
             >
               Get Started
             </Link>
-            <div className="flex flex-col gap-1.5">
-              <LogoMark className="size-6" />
-              <p className="text-lg font-semibold leading-tight">
-                Live in
-                <br />2 minutes
-              </p>
-            </div>
           </div>
         </div>
 

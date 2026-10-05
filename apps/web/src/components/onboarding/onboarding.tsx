@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { LogoMark, Sparkle } from "@/components/art";
 import { useCircleSdk, type CircleAuth } from "@/lib/circle-web";
@@ -10,6 +10,7 @@ import type { PublicStore } from "@/lib/stores";
 
 type Props = {
   circleAppId: string | undefined;
+  googleClientId: string | undefined;
   signedIn: boolean;
   email: string | null;
   store: PublicStore | null;
@@ -22,16 +23,17 @@ type Step = "email" | "store" | "done";
  * Flow A from the PRD: sign in with email -> name, logo, payout address -> printable QR,
  * payment link and till URL. Target: under two minutes.
  */
-export function Onboarding({ circleAppId, signedIn, email: initialEmail, store: initialStore, explorerUrl }: Props) {
+export function Onboarding({ circleAppId, googleClientId, signedIn, email: initialEmail, store: initialStore, explorerUrl }: Props) {
   const router = useRouter();
-  const circle = useCircleSdk(circleAppId);
+  const circle = useCircleSdk(circleAppId, googleClientId);
   const auth = useRef<CircleAuth | null>(null);
+  const handledSocialToken = useRef<string | null>(null);
   const [store, setStore] = useState(initialStore);
   const [email, setEmail] = useState(initialEmail ?? "");
+  const [socialSessionError, setSocialSessionError] = useState<string | null>(null);
   const step: Step = store ? "done" : signedIn ? "store" : "email";
 
-  async function signIn(address: string) {
-    const result = await circle.signInWithEmail(address);
+  async function finishSignIn(result: CircleAuth) {
     auth.current = result;
     const res = await fetch("/api/auth/session", {
       method: "POST",
@@ -42,6 +44,20 @@ export function Onboarding({ circleAppId, signedIn, email: initialEmail, store: 
     if (!res.ok) throw new Error(data.error ?? "Sign-in didn't finish. Try again.");
     router.refresh(); // re-reads the session on the server and moves to the next step
   }
+
+  async function signIn(address: string) {
+    await finishSignIn(await circle.signInWithEmail(address));
+  }
+
+  useEffect(() => {
+    const result = circle.socialAuth;
+    if (!result || handledSocialToken.current === result.userToken) return;
+    handledSocialToken.current = result.userToken;
+    setSocialSessionError(null);
+    finishSignIn(result).catch((err) => setSocialSessionError((err as Error).message));
+    // finishSignIn only depends on the stable router and this effect must run once per returned token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circle.socialAuth]);
 
   return (
     <div className="flex min-h-svh flex-col bg-canvas">
@@ -59,7 +75,15 @@ export function Onboarding({ circleAppId, signedIn, email: initialEmail, store: 
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-6 py-12">
         <StepMeter step={step} />
         {step === "email" && (
-          <EmailStep email={email} setEmail={setEmail} ready={circle.ready} sdkError={circle.error} onSubmit={signIn} />
+          <SignInStep
+            email={email}
+            setEmail={setEmail}
+            ready={circle.ready}
+            googleEnabled={Boolean(googleClientId)}
+            sdkError={circle.error ?? circle.socialError ?? socialSessionError}
+            onEmailSubmit={signIn}
+            onGoogleSubmit={circle.signInWithGoogle}
+          />
         )}
         {step === "store" && (
           <StoreStep
@@ -79,42 +103,76 @@ export function Onboarding({ circleAppId, signedIn, email: initialEmail, store: 
   );
 }
 
-/* ---------- step 1: email ---------- */
+/* ---------- step 1: sign in ---------- */
 
-function EmailStep({
+function SignInStep({
   email,
   setEmail,
   ready,
+  googleEnabled,
   sdkError,
-  onSubmit,
+  onEmailSubmit,
+  onGoogleSubmit,
 }: {
   email: string;
   setEmail: (v: string) => void;
   ready: boolean;
+  googleEnabled: boolean;
   sdkError: string | null;
-  onSubmit: (email: string) => Promise<void>;
+  onEmailSubmit: (email: string) => Promise<void>;
+  onGoogleSubmit: () => Promise<void>;
 }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"email" | "google" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setBusy(true);
+    setBusy("email");
     try {
-      await onSubmit(email.trim());
+      await onEmailSubmit(email.trim());
     } catch (err) {
       setError((err as Error).message);
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function submitGoogle() {
+    setError(null);
+    setBusy("google");
+    try {
+      await onGoogleSubmit();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(null);
     }
   }
 
   return (
     <form onSubmit={submit} noValidate>
       <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-[-0.03em] sm:text-5xl">Set up your store</h1>
-      <p className="mt-4 text-lg text-muted">Start with your email. We&apos;ll send you a code.</p>
+      <p className="mt-4 text-lg text-muted">Sign in to create your store and payment wallet.</p>
 
-      <Field label="Email" htmlFor="email" error={error} className="mt-10">
+      {googleEnabled && (
+        <SecondaryButton
+          onClick={submitGoogle}
+          busy={busy === "google"}
+          disabled={!ready || Boolean(busy) || Boolean(sdkError)}
+          className="mt-10 min-h-14 text-base"
+        >
+          {busy === "google" ? "Opening Google…" : <><GoogleMark /> Continue with Google</>}
+        </SecondaryButton>
+      )}
+
+      {googleEnabled && (
+        <div className="my-7 flex items-center gap-4" aria-hidden="true">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted">or use email</span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+      )}
+
+      <Field label="Email" htmlFor="email" error={error} className={googleEnabled ? "" : "mt-10"}>
         <input
           id="email"
           name="email"
@@ -138,11 +196,11 @@ function EmailStep({
         </p>
       )}
 
-      <PrimaryButton type="submit" busy={busy} disabled={!ready || !email.trim() || Boolean(sdkError)} className="mt-8">
-        {busy ? "Check your email" : ready || sdkError ? "Send me a code" : "Loading…"}
+      <PrimaryButton type="submit" busy={busy === "email"} disabled={!ready || !email.trim() || Boolean(busy) || Boolean(sdkError)} className="mt-8">
+        {busy === "email" ? "Check your email" : ready || sdkError ? "Send me a code" : "Loading…"}
       </PrimaryButton>
       <p className="mt-4 text-center text-sm text-muted">
-        Signing in also gives you a free wallet to receive payments, if you want one.
+        Use the same sign-in method next time to access the same wallet.
       </p>
     </form>
   );
@@ -492,14 +550,23 @@ function DoneStep({ store, onStore, explorerUrl }: { store: PublicStore; onStore
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <SecondaryButton onClick={() => window.print()}>Print QR</SecondaryButton>
+        <Link
+          href="/dashboard"
+          className="grid min-h-12 place-items-center rounded-xl bg-ink px-5 font-bold text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+        >
+          Go to dashboard
+        </Link>
         <Link
           href={`/till/${store.id}`}
-          className="grid min-h-12 place-items-center rounded-xl bg-ink px-5 font-bold text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+          className="grid min-h-12 place-items-center rounded-xl bg-surface px-5 font-bold text-ink shadow-pill transition-colors hover:bg-line focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
         >
           Open till
         </Link>
       </div>
+
+      <button type="button" onClick={() => window.print()} className="mt-3 min-h-11 w-full rounded-xl text-sm font-bold text-muted underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
+        Print payment QR
+      </button>
 
       <dl className="mt-8 flex flex-col gap-3">
         <CopyRow label="Payment link" value={payLink} hint="Customers can open this instead of scanning." />
@@ -676,6 +743,14 @@ function CheckIcon() {
     <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M5 12.5 10 17.5 19 7" />
     </svg>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-canvas font-display text-sm font-bold ring-1 ring-line">
+      G
+    </span>
   );
 }
 

@@ -106,12 +106,6 @@ export function SiteFooter() {
         </div>
       </div>
 
-      {/* Oversized wordmark, cropped by the page edge. */}
-      <div aria-hidden="true" className="pointer-events-none mt-10 select-none overflow-hidden">
-        <p className="translate-y-[18%] text-center font-display text-[24vw] font-extrabold leading-[0.8] tracking-[-0.06em] text-ink">
-          Jupa
-        </p>
-      </div>
     </footer>
   );
 }
