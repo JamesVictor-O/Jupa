@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EIP1193Provider } from "viem";
-import type { BridgeResult } from "@circle-fin/app-kit";
+import { BridgeChain, type BridgeResult } from "@circle-fin/app-kit";
+import type { ArcNetwork } from "@jupa/shared";
 import { useCircleSdk, type CircleAuth } from "@/lib/circle-web";
 
 type ChargeView = {
@@ -21,7 +22,7 @@ type ChargeView = {
 type WalletProvider = { info: { uuid: string; name: string; icon: string; rdns: string }; provider: EIP1193Provider };
 type SourceNetwork = {
   name: string;
-  chain: "Ethereum_Sepolia" | "Base_Sepolia" | "Arbitrum_Sepolia" | "Avalanche_Fuji" | "Optimism_Sepolia" | "Polygon_Amoy_Testnet" | "Unichain_Sepolia" | "Linea_Sepolia" | "Solana_Devnet";
+  chain: BridgeChain;
   family: "evm" | "solana";
   chainId?: number;
   rpc: string;
@@ -29,16 +30,28 @@ type SourceNetwork = {
   slow?: boolean;
 };
 
-const SOURCES: SourceNetwork[] = [
-  { name: "Ethereum Sepolia", family: "evm", chain: "Ethereum_Sepolia", chainId: 11155111, rpc: "https://rpc.sepolia.org", currency: "ETH" },
-  { name: "Base Sepolia", family: "evm", chain: "Base_Sepolia", chainId: 84532, rpc: "https://sepolia.base.org", currency: "ETH" },
-  { name: "Arbitrum Sepolia", family: "evm", chain: "Arbitrum_Sepolia", chainId: 421614, rpc: "https://sepolia-rollup.arbitrum.io/rpc", currency: "ETH" },
-  { name: "Avalanche Fuji", family: "evm", chain: "Avalanche_Fuji", chainId: 43113, rpc: "https://api.avax-test.network/ext/bc/C/rpc", currency: "AVAX", slow: true },
-  { name: "OP Sepolia", family: "evm", chain: "Optimism_Sepolia", chainId: 11155420, rpc: "https://sepolia.optimism.io", currency: "ETH" },
-  { name: "Polygon Amoy", family: "evm", chain: "Polygon_Amoy_Testnet", chainId: 80002, rpc: "https://rpc-amoy.polygon.technology", currency: "POL", slow: true },
-  { name: "Unichain Sepolia", family: "evm", chain: "Unichain_Sepolia", chainId: 1301, rpc: "https://sepolia.unichain.org", currency: "ETH" },
-  { name: "Linea Sepolia", family: "evm", chain: "Linea_Sepolia", chainId: 59141, rpc: "https://rpc.sepolia.linea.build", currency: "ETH" },
-  { name: "Solana Devnet", family: "solana", chain: "Solana_Devnet", rpc: "https://api.devnet.solana.com", currency: "SOL" },
+const TESTNET_SOURCES: SourceNetwork[] = [
+  { name: "Ethereum Sepolia", family: "evm", chain: BridgeChain.Ethereum_Sepolia, chainId: 11155111, rpc: "https://rpc.sepolia.org", currency: "ETH" },
+  { name: "Base Sepolia", family: "evm", chain: BridgeChain.Base_Sepolia, chainId: 84532, rpc: "https://sepolia.base.org", currency: "ETH" },
+  { name: "Arbitrum Sepolia", family: "evm", chain: BridgeChain.Arbitrum_Sepolia, chainId: 421614, rpc: "https://sepolia-rollup.arbitrum.io/rpc", currency: "ETH" },
+  { name: "Avalanche Fuji", family: "evm", chain: BridgeChain.Avalanche_Fuji, chainId: 43113, rpc: "https://api.avax-test.network/ext/bc/C/rpc", currency: "AVAX", slow: true },
+  { name: "OP Sepolia", family: "evm", chain: BridgeChain.Optimism_Sepolia, chainId: 11155420, rpc: "https://sepolia.optimism.io", currency: "ETH" },
+  { name: "Polygon Amoy", family: "evm", chain: BridgeChain.Polygon_Amoy_Testnet, chainId: 80002, rpc: "https://rpc-amoy.polygon.technology", currency: "POL", slow: true },
+  { name: "Unichain Sepolia", family: "evm", chain: BridgeChain.Unichain_Sepolia, chainId: 1301, rpc: "https://sepolia.unichain.org", currency: "ETH" },
+  { name: "Linea Sepolia", family: "evm", chain: BridgeChain.Linea_Sepolia, chainId: 59141, rpc: "https://rpc.sepolia.linea.build", currency: "ETH" },
+  { name: "Solana Devnet", family: "solana", chain: BridgeChain.Solana_Devnet, rpc: "https://api.devnet.solana.com", currency: "SOL" },
+];
+
+const MAINNET_SOURCES: SourceNetwork[] = [
+  { name: "Ethereum", family: "evm", chain: BridgeChain.Ethereum, chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", currency: "ETH", slow: true },
+  { name: "Base", family: "evm", chain: BridgeChain.Base, chainId: 8453, rpc: "https://mainnet.base.org", currency: "ETH" },
+  { name: "Arbitrum", family: "evm", chain: BridgeChain.Arbitrum, chainId: 42161, rpc: "https://arb1.arbitrum.io/rpc", currency: "ETH" },
+  { name: "Avalanche", family: "evm", chain: BridgeChain.Avalanche, chainId: 43114, rpc: "https://api.avax.network/ext/bc/C/rpc", currency: "AVAX", slow: true },
+  { name: "Optimism", family: "evm", chain: BridgeChain.Optimism, chainId: 10, rpc: "https://mainnet.optimism.io", currency: "ETH" },
+  { name: "Polygon", family: "evm", chain: BridgeChain.Polygon, chainId: 137, rpc: "https://polygon-bor-rpc.publicnode.com", currency: "POL", slow: true },
+  { name: "Unichain", family: "evm", chain: BridgeChain.Unichain, chainId: 130, rpc: "https://mainnet.unichain.org", currency: "ETH" },
+  { name: "Linea", family: "evm", chain: BridgeChain.Linea, chainId: 59144, rpc: "https://rpc.linea.build", currency: "ETH" },
+  { name: "Solana", family: "solana", chain: BridgeChain.Solana, rpc: "https://api.mainnet-beta.solana.com", currency: "SOL" },
 ];
 
 function decimalUsdc(baseUnits: string) {
@@ -65,19 +78,23 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 
 export function Checkout({
   charge,
+  arcNetwork,
   circleAppId,
   googleClientId,
 }: {
   charge: ChargeView;
+  arcNetwork: ArcNetwork;
   circleAppId?: string;
   googleClientId?: string;
 }) {
   const router = useRouter();
   const circle = useCircleSdk(circleAppId, googleClientId);
+  const sources = arcNetwork === "mainnet" ? MAINNET_SOURCES : TESTNET_SOURCES;
+  const destinationChain = arcNetwork === "mainnet" ? BridgeChain.Arc : BridgeChain.Arc_Testnet;
   const [email, setEmail] = useState("");
   const [auth, setAuth] = useState<CircleAuth | null>(null);
   const [method, setMethod] = useState<"external" | "jupa">("external");
-  const [source, setSource] = useState<SourceNetwork>(SOURCES[1]);
+  const [source, setSource] = useState<SourceNetwork>(sources[1]);
   const [walletName, setWalletName] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ fee: string; total: string; raw: string } | null>(null);
@@ -240,7 +257,7 @@ export function Checkout({
       const kit = new AppKit();
       const estimate = await kit.estimateBridge({
         from: { adapter, chain: source.chain },
-        to: { chain: "Arc_Testnet", recipientAddress: charge.crosschainRecipient, useForwarder: true },
+        to: { chain: destinationChain, recipientAddress: charge.crosschainRecipient, useForwarder: true },
         amount: decimalUsdc(charge.amount),
         config: { feePayment: "source", transferSpeed: source.slow ? "SLOW" : "FAST" },
       });
@@ -269,11 +286,12 @@ export function Checkout({
         ? await kit.retryBridge(recoveryRef.current, { from: adapter })
         : await kit.bridge({
             from: { adapter, chain: source.chain },
-            to: { chain: "Arc_Testnet", recipientAddress: charge.crosschainRecipient, useForwarder: true },
+            to: { chain: destinationChain, recipientAddress: charge.crosschainRecipient, useForwarder: true },
             amount: decimalUsdc(charge.amount),
             config: { feePayment: "source", transferSpeed: source.slow ? "SLOW" : "FAST" },
             quote: quote.raw,
           });
+      await reportBridgeAttempt(result);
       if (result.state !== "success") {
         recoveryRef.current = result;
         window.sessionStorage.setItem(`jupa:bridge:${charge.id}`, JSON.stringify(result, (_key, value) => typeof value === "bigint" ? value.toString() : value));
@@ -293,6 +311,29 @@ export function Checkout({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The cross-chain payment could not continue.");
       setBusy(false);
+    }
+  }
+
+  async function reportBridgeAttempt(result: BridgeResult) {
+    const stepHash = (name: string) => result.steps.find((step) => step.name.toLowerCase().includes(name))?.txHash ?? null;
+    try {
+      await fetch(`/api/checkout/${charge.id}/bridge-attempt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: result.provider,
+          sourceChain: result.source.chain.chain,
+          sourceWallet: result.source.address,
+          destinationAddress: charge.crosschainRecipient,
+          amount: result.amount,
+          token: result.token,
+          state: result.state,
+          burnTxHash: stepHash("burn"),
+          mintTxHash: stepHash("mint"),
+        }),
+      });
+    } catch {
+      // Arc settlement remains authoritative; reporting must never block payment recovery.
     }
   }
 
@@ -319,8 +360,8 @@ export function Checkout({
         ) : method === "external" ? (
           <div className="mt-7 space-y-4">
             <label className="block text-sm font-semibold" htmlFor="source-network">Pay USDC from</label>
-            <select id="source-network" value={source.chain} disabled={busy} onChange={(event) => { const next = SOURCES.find((item) => item.chain === event.target.value); if (next) { setSource(next); setQuote(null); setWalletAddress(null); setWalletName(null); providerRef.current = null; } }} className="w-full rounded-2xl border-2 border-ink bg-white px-5 py-4 outline-none">
-              {SOURCES.map((item) => <option value={item.chain} key={item.chain}>{item.name}</option>)}
+            <select id="source-network" value={source.chain} disabled={busy} onChange={(event) => { const next = sources.find((item) => item.chain === event.target.value); if (next) { setSource(next); setQuote(null); setWalletAddress(null); setWalletName(null); providerRef.current = null; } }} className="w-full rounded-2xl border-2 border-ink bg-white px-5 py-4 outline-none">
+              {sources.map((item) => <option value={item.chain} key={item.chain}>{item.name}</option>)}
             </select>
             {walletAddress && <p className="text-sm text-muted">{walletName ?? "Wallet"} · {walletAddress.slice(0, 7)}…{walletAddress.slice(-5)}</p>}
             {source.family === "solana" && walletName && <p className="text-sm text-muted">{walletName} connected. SOL is required for source-chain network fees.</p>}

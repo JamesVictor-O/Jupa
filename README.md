@@ -33,6 +33,23 @@ forge script script/Deploy.s.sol --rpc-url arc_testnet --account jupa-deployer -
 forge script script/DeployCrosschain.s.sol --rpc-url arc_testnet --account jupa-deployer --broadcast
 ```
 
+The checkout derives its source networks and Arc destination from
+`NEXT_PUBLIC_ARC_NETWORK`. Keep the default on `testnet` until contracts, RPCs,
+monitoring, and the relayer signer have passed the production checklist. For a
+mainnet deployment, use Arc Foundry and an encrypted or managed signer; do not
+put a production private key in `.env`.
+
+Mainnet uses the guarded combined deployment script. The admin must be a
+separate multisig or cold governance address; the relayer is the funded
+operational signer:
+
+```bash
+cd contracts
+REGISTRY_ADMIN=0x... REGISTRY_RELAYER=0x... \
+  forge script script/DeployMainnet.s.sol:DeployMainnet \
+  --rpc-url arc_mainnet --account jupa-deployer --broadcast
+```
+
 ## How Arc is used
 
 - **Settlement.** Every payment ends as one USDC transfer on Arc to the merchant's payout
@@ -47,6 +64,8 @@ forge script script/DeployCrosschain.s.sol --rpc-url arc_testnet --account jupa-
   mints there, the indexer deploys it and the constructor forwards its entire balance to the
   registry's current payout address. This prevents same-amount invoices from being confused.
 - **Finality.** The till shows Paid only after the Arc transfer is final.
+- **Reconciliation.** App Kit bridge attempts record source-chain recovery metadata,
+  but browser reports never settle a charge. Only the final verified Arc event does.
 
 The web process creates Circle wallet challenges but never receives a private key. The
 separate indexer must run continuously in production; it settles funded crosschain receivers,

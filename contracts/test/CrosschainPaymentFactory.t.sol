@@ -75,12 +75,23 @@ contract CrosschainPaymentFactoryTest is Test {
         assertEq(factory.receiverOf(STORE, CHARGE).code.length, 0);
     }
 
-    function test_chargeReceiverCanOnlyDeployOnce() public {
+    function test_receiverCanSweepLaterMints() public {
         address predicted = factory.receiverOf(STORE, CHARGE);
         usdc.mint(predicted, 1e6);
         factory.settle(STORE, CHARGE);
-        vm.expectRevert();
+        usdc.mint(predicted, 2e6);
         factory.settle(STORE, CHARGE);
+        assertEq(usdc.balanceOf(payout), 3e6);
+        assertEq(usdc.balanceOf(predicted), 0);
+    }
+
+    function test_onlyFactoryCanSweepReceiver() public {
+        address predicted = factory.receiverOf(STORE, CHARGE);
+        usdc.mint(predicted, 1e6);
+        factory.settle(STORE, CHARGE);
+        usdc.mint(predicted, 1e6);
+        vm.expectRevert(CrosschainPaymentReceiver.NotFactory.selector);
+        CrosschainPaymentReceiver(predicted).sweep();
     }
 
     function test_failedTransferDoesNotDeployReceiver() public {

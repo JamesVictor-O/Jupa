@@ -7,7 +7,7 @@
  */
 import { createPublicClient, createWalletClient, erc20Abi, http, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { charges, createDb, desc, eq, notInArray, payments, stores } from "@jupa/db";
+import { bridgeAttempts, charges, createDb, desc, eq, notInArray, paymentEvents, payments, sql, stores } from "@jupa/db";
 import { crosschainPaymentFactoryAbi, evaluatePayment, getArcConfig, storeRegistryAbi, type ArcNetwork } from "@jupa/shared";
 
 const arc = getArcConfig((process.env.ARC_NETWORK as ArcNetwork) ?? "testnet");
@@ -32,10 +32,12 @@ async function indexPayment(log: {
   };
   transactionHash?: `0x${string}` | null;
   blockNumber?: bigint | null;
-}) {
+  logIndex?: number | null;
+}, origin: "direct" | "crosschain") {
   const { storeId, chargeRef, payout, amount } = log.args;
   const txHash = log.transactionHash;
-  if (!storeId || !chargeRef || !payout || amount === undefined || !txHash) {
+  const logIndex = log.logIndex;
+  if (!storeId || !chargeRef || !payout || amount === undefined || !txHash || logIndex === undefined || logIndex === null) {
     console.warn("[indexer] ignored incomplete ChargePaid log", { txHash, blockNumber: log.blockNumber });
     return;
   }
@@ -68,19 +70,41 @@ async function indexPayment(log: {
   }
 
   const finalizedAt = new Date();
-  const result = evaluatePayment(record.charged, amount, finalizedAt, record.expiresAt);
-  await db.transaction(async (tx) => {
-    await tx
+  const indexed = await db.transaction(async (tx) => {
+    const insertedEvents = await tx
+      .insert(paymentEvents)
+      .values({
+        id: `${txHash}:${logIndex}`,
+        chargeId: record.chargeId,
+        txHash,
+        logIndex: BigInt(logIndex),
+        amount,
+      })
+      .onConflictDoNothing()
+      .returning({ id: paymentEvents.id });
+    if (insertedEvents.length === 0) return;
+
+    const [payment] = await tx
       .insert(payments)
       .values({
         chargeId: record.chargeId,
-        sourceChain: "arc",
-        sourceTxHash: txHash,
+        sourceChain: origin === "direct" ? "arc" : null,
+        sourceTxHash: origin === "direct" ? txHash : null,
         arcTxHash: txHash,
         amountReceived: amount,
         finalizedAt,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: payments.chargeId,
+        set: {
+          amountReceived: sql`coalesce(${payments.amountReceived}, 0) + ${amount}`,
+          arcTxHash: txHash,
+          finalizedAt,
+        },
+      })
+      .returning({ amountReceived: payments.amountReceived });
+    const totalReceived = payment.amountReceived ?? 0n;
+    const result = evaluatePayment(record.charged, totalReceived, finalizedAt, record.expiresAt);
 
     await tx
       .update(charges)
@@ -90,22 +114,28 @@ async function indexPayment(log: {
           : { status: "needs_attention" },
       )
       .where(eq(charges.id, record.chargeId));
+    if (origin === "crosschain") {
+      await tx.update(bridgeAttempts).set({ arcSettledAt: finalizedAt }).where(eq(bridgeAttempts.chargeId, record.chargeId));
+    }
+    return { result, totalReceived };
   });
 
-  console.log(`[indexer] ${result.settles ? "settled" : "flagged"} charge ${record.chargeId}`, {
-    amount: amount.toString(),
+  if (!indexed) return;
+
+  console.log(`[indexer] ${indexed.result.settles ? "settled" : "flagged"} charge ${record.chargeId}`, {
+    amount: indexed.totalReceived.toString(),
     txHash,
   });
 }
 
 console.log(`[indexer] watching ${registry} on Arc ${arc.network}`);
 
-async function processLogs(logs: Parameters<typeof indexPayment>[0][]) {
+async function processLogs(logs: Parameters<typeof indexPayment>[0][], origin: "direct" | "crosschain") {
   for (const log of logs) {
     const { storeId, chargeRef, payout, amount } = log.args;
     console.log("[indexer] ChargePaid", { storeId, chargeRef, payout, amount, tx: log.transactionHash });
     try {
-      await indexPayment(log);
+      await indexPayment(log, origin);
     } catch (error) {
       console.error("[indexer] failed to index ChargePaid", { tx: log.transactionHash, error });
     }
@@ -118,7 +148,7 @@ client.watchContractEvent({
   eventName: "ChargePaid",
   poll: true,
   pollingInterval: 1_000,
-  onLogs: processLogs,
+  onLogs: (logs) => processLogs(logs, "direct"),
   onError: (err) => console.error("[indexer] watch error", err),
 });
 
@@ -129,7 +159,7 @@ if (factory) {
     eventName: "CrosschainChargePaid",
     poll: true,
     pollingInterval: 1_000,
-    onLogs: processLogs,
+    onLogs: (logs) => processLogs(logs, "crosschain"),
     onError: (err) => console.error("[indexer] crosschain watch error", err),
   });
 }
@@ -147,7 +177,7 @@ try {
     fromBlock,
     toBlock: head,
   });
-  await processLogs(historical);
+  await processLogs(historical, "direct");
   console.log(`[indexer] replayed ${historical.length} payment event(s) from block ${fromBlock}`);
 } catch (error) {
   console.error("[indexer] historical replay failed; live watcher remains active", error);
@@ -165,7 +195,7 @@ if (factory) {
       fromBlock: crosschainFrom,
       toBlock: crosschainHead,
     });
-    await processLogs(historical);
+    await processLogs(historical, "crosschain");
     console.log(`[indexer] replayed ${historical.length} crosschain event(s) from block ${crosschainFrom}`);
   } catch (error) {
     console.error("[indexer] crosschain replay failed; live watcher remains active", error);

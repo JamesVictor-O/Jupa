@@ -29,5 +29,5 @@ export default async function CheckoutPage(props: PageProps<"/pay/[chargeId]">) 
   const network = ((process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet") === "mainnet" ? "Arc" : "Arc testnet";
   const crosschainRecipient = await crosschainReceiver(record.registryId as `0x${string}`, record.reference as `0x${string}`);
 
-  return <Checkout charge={{ id: record.id, status: record.status, storeName: record.storeName, payoutAddress: record.payoutAddress, amountLabel: formatUsd(record.amount), amount: record.amount.toString(), expiresAt: record.expiresAt.toISOString(), network, crosschainRecipient }} circleAppId={process.env.NEXT_PUBLIC_CIRCLE_APP_ID} googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID} />;
+  return <Checkout charge={{ id: record.id, status: record.status, storeName: record.storeName, payoutAddress: record.payoutAddress, amountLabel: formatUsd(record.amount), amount: record.amount.toString(), expiresAt: record.expiresAt.toISOString(), network, crosschainRecipient }} arcNetwork={(process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet"} circleAppId={process.env.NEXT_PUBLIC_CIRCLE_APP_ID} googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID} />;
 }

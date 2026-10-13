@@ -14,13 +14,30 @@ interface IStorePayoutRegistry {
 /// forwards the USDC already minted to its counterfactual address to the registry's
 /// current payout address. It never accepts an arbitrary destination.
 contract CrosschainPaymentReceiver {
+    IArcUSDC public immutable usdc;
+    IStorePayoutRegistry public immutable registry;
+    bytes32 public immutable storeId;
+    address public immutable factory;
+
     error ZeroBalance();
     error TransferFailed();
+    error NotFactory();
 
-    constructor(IArcUSDC usdc, IStorePayoutRegistry registry, bytes32 storeId) {
-        uint256 amount = usdc.balanceOf(address(this));
+    constructor(IArcUSDC usdc_, IStorePayoutRegistry registry_, bytes32 storeId_) {
+        factory = msg.sender;
+        usdc = usdc_;
+        registry = registry_;
+        storeId = storeId_;
+    }
+
+    /// @dev Remains callable after deployment so an early dust settlement cannot
+    /// permanently consume the CREATE2 address and trap a later CCTP mint.
+    function sweep() external returns (address payout, uint256 amount) {
+        if (msg.sender != factory) revert NotFactory();
+        amount = usdc.balanceOf(address(this));
         if (amount == 0) revert ZeroBalance();
-        if (!usdc.transfer(registry.payoutOf(storeId), amount)) revert TransferFailed();
+        payout = registry.payoutOf(storeId);
+        if (!usdc.transfer(payout, amount)) revert TransferFailed();
     }
 }
 
@@ -56,15 +73,20 @@ contract CrosschainPaymentFactory {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initCodeHash)))));
     }
 
-    /// @notice Forward a completed CCTP mint to the merchant and emit its charge reference.
+    /// @notice Forward all currently available USDC to the merchant and emit its charge reference.
     /// @dev Permissionless and safe: destination comes only from StoreRegistry.
     function settle(bytes32 storeId, bytes32 chargeRef) external returns (address receiver, uint256 amount) {
         receiver = receiverOf(storeId, chargeRef);
-        amount = usdc.balanceOf(receiver);
-        address payout = registry.payoutOf(storeId);
-        bytes32 salt = keccak256(abi.encode(storeId, chargeRef));
-        CrosschainPaymentReceiver deployed = new CrosschainPaymentReceiver{salt: salt}(usdc, registry, storeId);
-        assert(address(deployed) == receiver);
+        CrosschainPaymentReceiver deployed;
+        if (receiver.code.length == 0) {
+            bytes32 salt = keccak256(abi.encode(storeId, chargeRef));
+            deployed = new CrosschainPaymentReceiver{salt: salt}(usdc, registry, storeId);
+            assert(address(deployed) == receiver);
+        } else {
+            deployed = CrosschainPaymentReceiver(receiver);
+        }
+        address payout;
+        (payout, amount) = deployed.sweep();
         emit CrosschainChargePaid(storeId, chargeRef, receiver, payout, amount);
     }
 }

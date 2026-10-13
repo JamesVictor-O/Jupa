@@ -4,6 +4,7 @@ import { CHARGE_STATUSES } from "@jupa/shared";
 export const chargeStatus = pgEnum("charge_status", CHARGE_STATUSES);
 export const registryStatus = pgEnum("registry_status", ["pending", "registered", "failed"]);
 export const sourceChain = pgEnum("source_chain", ["arc", "base", "ethereum", "arbitrum", "solana"]);
+export const bridgeAttemptStatus = pgEnum("bridge_attempt_status", ["pending", "success", "error"]);
 
 /**
  * A merchant account. Identity is the Circle user id, verified server-side from a Circle
@@ -68,14 +69,48 @@ export const payments = pgTable("payments", {
   chargeId: text("charge_id")
     .primaryKey()
     .references(() => charges.id),
-  sourceChain: sourceChain("source_chain").notNull(),
+  /** Null until a trusted source-chain observer correlates a cross-chain payment. */
+  sourceChain: sourceChain("source_chain"),
   sourceTxHash: text("source_tx_hash"),
   arcTxHash: text("arc_tx_hash").unique(),
   amountReceived: bigint("amount_received", { mode: "bigint" }),
   finalizedAt: timestamp("finalized_at", { withTimezone: true }),
 });
 
+/** Deduplicates Arc logs so historical replay cannot credit the same settlement twice. */
+export const paymentEvents = pgTable("payment_events", {
+  id: text("id").primaryKey(), // `${transactionHash}:${logIndex}`
+  chargeId: text("charge_id")
+    .notNull()
+    .references(() => charges.id, { onDelete: "cascade" }),
+  txHash: text("tx_hash").notNull(),
+  logIndex: bigint("log_index", { mode: "bigint" }).notNull(),
+  amount: bigint("amount", { mode: "bigint" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Browser-reported bridge evidence used for recovery and reconciliation. None of
+ * these fields prove payment; only the final Arc event indexed into `payments`
+ * settles a charge.
+ */
+export const bridgeAttempts = pgTable("bridge_attempts", {
+  chargeId: text("charge_id")
+    .primaryKey()
+    .references(() => charges.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  sourceChain: text("source_chain").notNull(),
+  sourceWallet: text("source_wallet").notNull(),
+  burnTxHash: text("burn_tx_hash"),
+  mintTxHash: text("mint_tx_hash"),
+  status: bridgeAttemptStatus("status").notNull(),
+  reportedAt: timestamp("reported_at", { withTimezone: true }).notNull().defaultNow(),
+  arcSettledAt: timestamp("arc_settled_at", { withTimezone: true }),
+});
+
 export type Merchant = typeof merchants.$inferSelect;
 export type Store = typeof stores.$inferSelect;
 export type Charge = typeof charges.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
+export type PaymentEvent = typeof paymentEvents.$inferSelect;
+export type BridgeAttempt = typeof bridgeAttempts.$inferSelect;

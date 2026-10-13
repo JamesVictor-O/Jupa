@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { charges, eq, payments, stores } from "@jupa/db";
+import { bridgeAttempts, charges, eq, payments, stores } from "@jupa/db";
 import { arcTxUrl, formatUsd, getArcConfig, type ArcNetwork } from "@jupa/shared";
 import { db } from "@/lib/db";
 
@@ -21,11 +21,15 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
       amountReceived: payments.amountReceived,
       finalizedAt: payments.finalizedAt,
       sourceChain: payments.sourceChain,
+      reportedSourceChain: bridgeAttempts.sourceChain,
+      routeProvider: bridgeAttempts.provider,
+      sourceTxHash: bridgeAttempts.burnTxHash,
       arcTxHash: payments.arcTxHash,
     })
     .from(charges)
     .innerJoin(stores, eq(stores.id, charges.storeId))
     .leftJoin(payments, eq(payments.chargeId, charges.id))
+    .leftJoin(bridgeAttempts, eq(bridgeAttempts.chargeId, charges.id))
     .where(eq(charges.id, chargeId))
     .limit(1);
   if (!record) notFound();
@@ -46,7 +50,8 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
         <dl className="mt-8 divide-y divide-line rounded-2xl bg-canvas px-5 text-sm">
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Status</dt><dd className="font-semibold capitalize">{record.status.replace("_", " ")}</dd></div>
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Asset</dt><dd className="font-semibold">USDC</dd></div>
-          <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Network</dt><dd className="font-semibold">{record.sourceChain === "arc" ? (arc.network === "mainnet" ? "Arc" : "Arc testnet") : "—"}</dd></div>
+          <div className="flex justify-between gap-4 py-4"><dt className="text-muted">{record.sourceChain === "arc" ? "Paid from" : "Reported source"}</dt><dd className="font-semibold">{record.sourceChain === "arc" ? (arc.network === "mainnet" ? "Arc" : "Arc testnet") : record.reportedSourceChain?.replaceAll("_", " ") ?? "—"}</dd></div>
+          {record.routeProvider && <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Route</dt><dd className="max-w-52 truncate font-semibold">{record.routeProvider}</dd></div>}
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Time</dt><dd className="font-semibold">{(record.finalizedAt ?? record.createdAt).toLocaleString()}</dd></div>
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Reference</dt><dd className="font-mono text-xs">{record.id}</dd></div>
         </dl>

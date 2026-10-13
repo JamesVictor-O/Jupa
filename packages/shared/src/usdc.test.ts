@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatUsd, parseUsd } from "./usdc";
+import { formatUsd, parseUsd, parseUsdc } from "./usdc";
 import { canTransition, evaluatePayment } from "./charge";
 
 describe("usdc amounts", () => {
+  it("parses exact six-decimal bridge amounts", () => {
+    expect(parseUsdc("12")).toBe(12_000_000n);
+    expect(parseUsdc("12.000001")).toBe(12_000_001n);
+    expect(() => parseUsdc("12.0000001")).toThrow("Invalid USDC amount");
+  });
+
   it("parses and formats", () => {
     expect(parseUsd("12.5")).toBe(12_500_000n);
     expect(formatUsd(1_234_500_000n)).toBe("$1,234.50");
