@@ -48,7 +48,12 @@ export async function POST(req: NextRequest) {
     }
     if (details.status === 401 || details.status === 403) {
       return NextResponse.json(
-        { error: "The sign-in service rejected the server configuration.", requestId },
+        {
+          error: "The sign-in service rejected the server configuration.",
+          requestId,
+          providerStatus: details.status,
+          providerCode: details.code,
+        },
         { status: 503 },
       );
     }
