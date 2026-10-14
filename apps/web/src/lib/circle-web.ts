@@ -123,7 +123,10 @@ export function useCircleSdk(appId: string | undefined, googleClientId?: string)
       const data = await res.json();
       if (!res.ok) {
         const reference = data.requestId ? ` Reference: ${data.requestId}` : "";
-        throw new Error(`${data.error ?? "We couldn't send a code. Try again."}${reference}`);
+        const provider = data.providerStatus || data.providerCode
+          ? ` Circle: ${data.providerStatus ?? "unknown"}/${data.providerCode ?? "unknown"}.`
+          : "";
+        throw new Error(`${data.error ?? "We couldn't send a code. Try again."}${provider}${reference}`);
       }
 
       return new Promise<CircleAuth>((resolve, reject) => {

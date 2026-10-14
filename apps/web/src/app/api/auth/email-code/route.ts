@@ -53,7 +53,12 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: "We couldn't send a code. Check the email and try again.", requestId },
+      {
+        error: "We couldn't send a code. Check the email and try again.",
+        requestId,
+        providerStatus: details.status,
+        providerCode: details.code,
+      },
       { status: 502 },
     );
   }
