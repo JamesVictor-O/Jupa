@@ -3,6 +3,13 @@ import type { Address, Chain } from "viem";
 
 export type ArcNetwork = "testnet" | "mainnet";
 
+/** Resolve Arc safely: production must never silently fall back to testnet. */
+export function resolveArcNetwork(value: string | undefined, environment?: string): ArcNetwork {
+  if (value === "mainnet" || value === "testnet") return value;
+  if (value) throw new Error(`Invalid Arc network: ${value}`);
+  return environment === "production" ? "mainnet" : "testnet";
+}
+
 export interface ArcConfig {
   network: ArcNetwork;
   chain: Chain;

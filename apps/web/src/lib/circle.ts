@@ -1,5 +1,6 @@
 import "server-only";
 import { initiateUserControlledWalletsClient } from "@circle-fin/user-controlled-wallets";
+import { resolveArcNetwork } from "@jupa/shared";
 
 let client: ReturnType<typeof initiateUserControlledWalletsClient> | null = null;
 
@@ -21,7 +22,7 @@ export class CircleNotConfigured extends Error {
 
 /** Circle's Arc blockchain id for the active network. */
 export function circleArcChain() {
-  return process.env.NEXT_PUBLIC_ARC_NETWORK === "mainnet" ? "ARC" : "ARC-TESTNET";
+  return resolveArcNetwork(process.env.NEXT_PUBLIC_ARC_NETWORK, process.env.NODE_ENV) === "mainnet" ? "ARC" : "ARC-TESTNET";
 }
 
 /** Circle API errors carry a numeric code on response.data; pull it out if present. */

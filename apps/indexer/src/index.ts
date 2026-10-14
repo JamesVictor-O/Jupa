@@ -8,9 +8,9 @@
 import { createPublicClient, createWalletClient, erc20Abi, http, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { bridgeAttempts, charges, createDb, desc, eq, notInArray, paymentEvents, payments, sql, stores } from "@jupa/db";
-import { crosschainPaymentFactoryAbi, evaluatePayment, getArcConfig, storeRegistryAbi, type ArcNetwork } from "@jupa/shared";
+import { crosschainPaymentFactoryAbi, evaluatePayment, getArcConfig, resolveArcNetwork, storeRegistryAbi } from "@jupa/shared";
 
-const arc = getArcConfig((process.env.ARC_NETWORK as ArcNetwork) ?? "testnet");
+const arc = getArcConfig(resolveArcNetwork(process.env.ARC_NETWORK, process.env.NODE_ENV));
 const configuredRegistry = process.env.STORE_REGISTRY_ADDRESS as Address | undefined;
 if (!configuredRegistry) throw new Error("STORE_REGISTRY_ADDRESS is not set");
 const registry: Address = configuredRegistry;

@@ -1,11 +1,11 @@
 import "server-only";
-import { crosschainPaymentFactoryAbi, getArcConfig, type ArcNetwork } from "@jupa/shared";
+import { crosschainPaymentFactoryAbi, getArcConfig, resolveArcNetwork } from "@jupa/shared";
 import { createPublicClient, http, isAddress, type Address, type Hex } from "viem";
 
 export async function crosschainReceiver(storeId: Hex, chargeRef: Hex): Promise<Address | null> {
   const factory = process.env.CROSSCHAIN_PAYMENT_FACTORY_ADDRESS;
   if (!factory || !isAddress(factory)) return null;
-  const arc = getArcConfig((process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet");
+  const arc = getArcConfig(resolveArcNetwork(process.env.NEXT_PUBLIC_ARC_NETWORK, process.env.NODE_ENV));
   const client = createPublicClient({
     chain: arc.chain,
     transport: http(process.env.ARC_RPC_URL ?? arc.chain.rpcUrls.default.http[0]),

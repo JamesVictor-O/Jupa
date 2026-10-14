@@ -1,3 +1,4 @@
-import { getArcConfig, type ArcNetwork } from "@jupa/shared";
+import { getArcConfig, resolveArcNetwork } from "@jupa/shared";
 
-export const arc = getArcConfig((process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork) ?? "testnet");
+export const arcNetwork = resolveArcNetwork(process.env.NEXT_PUBLIC_ARC_NETWORK, process.env.NODE_ENV);
+export const arc = getArcConfig(arcNetwork);

@@ -1,13 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { charges, eq, stores } from "@jupa/db";
-import { formatUsd, getArcConfig, type ArcNetwork } from "@jupa/shared";
+import { formatUsd } from "@jupa/shared";
 import { createPublicClient, erc20Abi, http, isAddress, type Address } from "viem";
 import { circle, circleArcChain, verifyUserToken } from "@/lib/circle";
 import { crosschainReceiver } from "@/lib/crosschain";
 import { db } from "@/lib/db";
-
-const network = (process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet";
-const arc = getArcConfig(network);
+import { arc, arcNetwork as network } from "@/lib/env";
 
 async function checkout(chargeId: string) {
   const [record] = await db

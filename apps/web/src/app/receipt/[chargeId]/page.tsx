@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { bridgeAttempts, charges, eq, payments, stores } from "@jupa/db";
-import { arcTxUrl, formatUsd, getArcConfig, type ArcNetwork } from "@jupa/shared";
+import { arcTxUrl, formatUsd } from "@jupa/shared";
 import { db } from "@/lib/db";
+import { arc } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Payment receipt · Jupa" };
 
@@ -34,7 +35,6 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
     .limit(1);
   if (!record) notFound();
 
-  const arc = getArcConfig((process.env.NEXT_PUBLIC_ARC_NETWORK as ArcNetwork | undefined) ?? "testnet");
   const paid = record.status === "paid";
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6 py-12">
