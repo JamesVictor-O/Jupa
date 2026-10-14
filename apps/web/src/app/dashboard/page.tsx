@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, charges, desc, eq, gte, payments, stores } from "@jupa/db";
+import { and, bridgeAttempts, charges, desc, eq, gte, payments, sql, stores } from "@jupa/db";
 import { formatUsd } from "@jupa/shared";
 import { StoreTools } from "@/components/dashboard/store-tools";
 import { MerchantShell } from "@/components/dashboard/merchant-shell";
@@ -22,18 +22,33 @@ export default async function DashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Activity shows only what happened to money: charges waiting at the counter, payments
+  // processing, received, or failed. Abandoned payment-page checkouts and charges that
+  // expired untouched are noise, so they never appear.
+  const visible = sql`(
+    ${charges.status} in ('paying', 'paid', 'needs_attention')
+    or (${charges.status} = 'created' and ${charges.origin} = 'counter' and ${charges.expiresAt} > now())
+    or (${charges.status} = 'expired' and ${bridgeAttempts.chargeId} is not null)
+  )`;
+
   const [todayRows, recentRows] = await Promise.all([
-    db.select({ status: charges.status, amountReceived: payments.amountReceived }).from(charges)
+    db.select({ status: charges.status, origin: charges.origin, expiresAt: charges.expiresAt, amountReceived: payments.amountReceived }).from(charges)
       .leftJoin(payments, eq(payments.chargeId, charges.id))
       .where(and(eq(charges.storeId, store.id), gte(charges.createdAt, today))),
-    db.select({ id: charges.id, amount: charges.amount, status: charges.status, createdAt: charges.createdAt, late: charges.late, overpaid: charges.overpaid, amountReceived: payments.amountReceived, arcTxHash: payments.arcTxHash })
-      .from(charges).leftJoin(payments, eq(payments.chargeId, charges.id))
-      .where(eq(charges.storeId, store.id)).orderBy(desc(charges.createdAt)).limit(8),
+    db.select({ id: charges.id, amount: charges.amount, status: charges.status, createdAt: charges.createdAt, late: charges.late, overpaid: charges.overpaid, amountReceived: payments.amountReceived, arcTxHash: payments.arcTxHash, attempted: sql<boolean>`${bridgeAttempts.chargeId} is not null` })
+      .from(charges)
+      .leftJoin(payments, eq(payments.chargeId, charges.id))
+      .leftJoin(bridgeAttempts, eq(bridgeAttempts.chargeId, charges.id))
+      .where(and(eq(charges.storeId, store.id), visible))
+      .orderBy(desc(charges.createdAt)).limit(8),
   ]);
 
+  const now = new Date();
   const successful = todayRows.filter((row) => row.status === "paid");
   const collected = successful.reduce((sum, row) => sum + (row.amountReceived ?? 0n), 0n);
-  const awaiting = todayRows.filter((row) => row.status === "created" || row.status === "paying").length;
+  const waiting = todayRows.filter((row) => row.status === "created" && row.origin === "counter" && row.expiresAt > now).length;
+  const processing = todayRows.filter((row) => row.status === "paying").length;
+  const inProgress = waiting + processing;
   const average = successful.length ? collected / BigInt(successful.length) : 0n;
 
   return (
@@ -48,14 +63,14 @@ export default async function DashboardPage() {
           <section aria-label="Today's performance" className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Collected" value={formatUsd(collected)} detail="Settled today" strong />
             <Metric label="Payments" value={successful.length.toLocaleString()} detail="Successful today" />
-            <Metric label="Awaiting" value={awaiting.toLocaleString()} detail={awaiting ? "Open or processing" : "Nothing needs attention"} />
+            <Metric label="In progress" value={inProgress.toLocaleString()} detail={inProgressDetail(waiting, processing)} />
             <Metric label="Average payment" value={formatUsd(average)} detail="Across successful payments" />
           </section>
 
           <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <section className="overflow-hidden rounded-3xl bg-surface shadow-pill" aria-labelledby="activity-heading">
               <div className="flex items-center justify-between border-b border-line px-5 py-5 sm:px-6">
-                <div><h2 id="activity-heading" className="text-lg font-bold">Recent activity</h2><p className="mt-1 text-sm text-muted">Your latest payment attempts and settlements.</p></div>
+                <div><h2 id="activity-heading" className="text-lg font-bold">Recent activity</h2><p className="mt-1 text-sm text-muted">Payments received, processing or failed, and charges waiting at your counter.</p></div>
                 <span className="rounded-full bg-canvas px-3 py-1.5 text-xs font-semibold text-muted">Latest 8</span>
               </div>
               {recentRows.length ? (
@@ -64,7 +79,7 @@ export default async function DashboardPage() {
                     <article key={row.id} className="flex items-center gap-3 px-5 py-4 sm:px-6">
                       <StatusMark status={row.status} />
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><p className="font-bold">{statusLabel(row.status)}</p>{row.late && <Tag>Late</Tag>}{row.overpaid && <Tag>Overpaid</Tag>}</div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><p className="font-bold">{activityLabel(row.status, row.attempted)}</p>{row.late && <Tag>Late</Tag>}{row.overpaid && <Tag>Overpaid</Tag>}</div>
                         <p className="mt-1 text-sm text-muted">{new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(row.createdAt)}</p>
                       </div>
                       <div className="text-right">
@@ -80,7 +95,7 @@ export default async function DashboardPage() {
                 <div className="px-6 py-14 text-center">
                   <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-canvas"><ReceiptIcon /></span>
                   <h3 className="mt-4 font-bold">No payments yet</h3>
-                  <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Open the till to create your first charge, or share your payment page with a customer.</p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Open your counter to create a charge, or share your payment page with a customer.</p>
                   <Link href={`/till/${store.id}`} className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-ink px-4 text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink">Create first charge</Link>
                 </div>
               )}
@@ -104,7 +119,14 @@ function StatusMark({ status }: { status: string }) {
 }
 
 function Tag({ children }: { children: React.ReactNode }) { return <span className="rounded-full bg-coral/20 px-2 py-0.5 text-[11px] font-bold">{children}</span>; }
-function statusLabel(status: string) { return ({ created: "Charge created", paying: "Payment processing", paid: "Payment received", expired: "Charge expired", needs_attention: "Needs attention" } as Record<string, string>)[status] ?? status; }
+function activityLabel(status: string, attempted: boolean) {
+  if (status === "expired") return attempted ? "Payment failed" : "Charge expired";
+  return ({ created: "Waiting for payment", paying: "Payment processing", paid: "Payment received", needs_attention: "Payment failed" } as Record<string, string>)[status] ?? status;
+}
+function inProgressDetail(waiting: number, processing: number) {
+  if (!waiting && !processing) return "Nothing in progress";
+  return [waiting && `${waiting} waiting at your counter`, processing && `${processing} processing`].filter(Boolean).join(" · ");
+}
 function greeting() { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; }
 function PlusIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 fill-none stroke-current stroke-2"><path d="M12 5v14M5 12h14"/></svg>; }
 function CheckIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 fill-none stroke-current stroke-[2.5]"><path d="m5 12 4 4L19 6"/></svg>; }

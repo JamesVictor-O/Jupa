@@ -560,7 +560,7 @@ function DoneStep({ store, onStore, explorerUrl }: { store: PublicStore; onStore
           href={`/till/${store.id}`}
           className="grid min-h-12 place-items-center rounded-xl bg-surface px-5 font-bold text-ink shadow-pill transition-colors hover:bg-line focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
         >
-          Open till
+          Open counter
         </Link>
       </div>
 
@@ -570,7 +570,7 @@ function DoneStep({ store, onStore, explorerUrl }: { store: PublicStore; onStore
 
       <dl className="mt-8 flex flex-col gap-3">
         <CopyRow label="Payment link" value={payLink} hint="Customers can open this instead of scanning." />
-        <CopyRow label="Till" value={tillUrl} hint="Open on the phone or tablet at your counter." />
+        <CopyRow label="Counter" value={tillUrl} hint="Open on the phone or tablet you take payments with." />
       </dl>
     </div>
   );

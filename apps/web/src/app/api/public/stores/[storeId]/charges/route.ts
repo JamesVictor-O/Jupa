@@ -25,6 +25,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/public/stor
   }
 
   const [charge] = await db.insert(charges).values({
+    origin: "customer",
     id: randomBytes(16).toString("base64url"),
     storeId: store.id,
     reference: `0x${randomBytes(32).toString("hex")}`,

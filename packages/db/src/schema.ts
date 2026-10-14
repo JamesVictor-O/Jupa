@@ -45,6 +45,9 @@ export const stores = pgTable("stores", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Where a charge came from: the merchant's counter screen, or a customer on the public payment page. */
+export const chargeOrigin = pgEnum("charge_origin", ["counter", "customer"]);
+
 export const charges = pgTable(
   "charges",
   {
@@ -56,6 +59,7 @@ export const charges = pgTable(
     reference: text("reference").notNull().unique(),
     amount: bigint("amount", { mode: "bigint" }).notNull(), // USDC, 6 decimals
     status: chargeStatus("status").notNull().default("created"),
+    origin: chargeOrigin("origin").notNull().default("counter"),
     late: boolean("late").notNull().default(false),
     overpaid: boolean("overpaid").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

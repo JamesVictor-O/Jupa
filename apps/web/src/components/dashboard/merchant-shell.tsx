@@ -14,7 +14,7 @@ export function MerchantShell({ store, active, children }: { store: StoreSummary
         </div>
         <nav aria-label="Merchant navigation" className="flex gap-2 overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:px-4 lg:pb-0">
           <NavItem href="/dashboard" active={active === "home"} icon={<HomeIcon />}>Home</NavItem>
-          <NavItem href={`/till/${store.id}`} active={active === "till"} icon={<TillIcon />}>Open till</NavItem>
+          <NavItem href={`/till/${store.id}`} active={active === "till"} icon={<TillIcon />}>Counter</NavItem>
           <NavItem href={`/s/${store.id}`} icon={<LinkIcon />} external>Payment page</NavItem>
         </nav>
         <div className="hidden px-7 pt-10 lg:block">

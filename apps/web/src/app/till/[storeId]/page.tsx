@@ -6,7 +6,7 @@ import { MerchantShell } from "@/components/dashboard/merchant-shell";
 import { db } from "@/lib/db";
 import { currentMerchant } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Till · Jupa" };
+export const metadata: Metadata = { title: "Counter · Jupa" };
 
 export default async function TillPage(props: PageProps<"/till/[storeId]">) {
   const merchant = await currentMerchant();
@@ -21,7 +21,7 @@ export default async function TillPage(props: PageProps<"/till/[storeId]">) {
       <main className="min-h-screen bg-canvas px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
         <div className="mx-auto max-w-6xl">
           <p className="text-sm font-semibold text-muted">Point of sale</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-[-0.04em]">Open till</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-[-0.04em]">Counter</h1>
         </div>
         <Till storeId={store.id} storeName={store.name} ready={store.registryStatus === "registered"} />
       </main>
