@@ -20,6 +20,7 @@ type ChargeView = {
 };
 
 type WalletProvider = { info: { uuid: string; name: string; icon: string; rdns: string }; provider: EIP1193Provider };
+type BrowserWithEthereum = typeof window & { ethereum?: EIP1193Provider };
 type SourceNetwork = {
   name: string;
   chain: BridgeChain;
@@ -227,6 +228,11 @@ export function Checkout({
       if (selected) {
         provider = selected.provider;
         setWalletName(selected.info.name);
+      } else if ((window as BrowserWithEthereum).ethereum) {
+        // Some mobile wallet browsers still inject only the legacy EIP-1193
+        // provider and do not announce themselves through EIP-6963.
+        provider = (window as BrowserWithEthereum).ethereum!;
+        setWalletName("Mobile wallet");
       } else {
         if (!walletConnectProjectId) {
           throw new Error("Mobile wallet connection is not configured yet. Open this page inside your wallet app or try again later.");
@@ -246,14 +252,25 @@ export function Checkout({
             url: window.location.origin,
             icons: [`${window.location.origin}/favicon.ico`],
           },
+          qrModalOptions: { themeMode: "light" },
         });
-        await walletConnect.enable();
+        try {
+          await walletConnect.connect();
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          if (/401|403|origin|allowlist|unauthorized|project/i.test(detail)) {
+            throw new Error(`WalletConnect rejected ${window.location.origin}. Add this exact origin to the Reown project allowlist, then try again.`);
+          }
+          if (/reject|cancel|close/i.test(detail)) throw new Error("Wallet connection was cancelled. Tap Connect wallet & review to try again.");
+          throw new Error(`WalletConnect could not open a mobile wallet. ${detail}`);
+        }
         provider = walletConnect as EIP1193Provider;
         setWalletName("WalletConnect");
       }
       providerRef.current = provider;
     }
-    const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+    let accounts = (await provider.request({ method: "eth_accounts" })) as string[];
+    if (!accounts[0]) accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
     if (!accounts[0]) throw new Error("No wallet account was selected.");
     setWalletAddress(accounts[0]);
 
