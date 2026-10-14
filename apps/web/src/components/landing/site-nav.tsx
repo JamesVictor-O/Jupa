@@ -38,16 +38,7 @@ export function SiteNav() {
         </ul>
       </nav>
 
-      <Link
-        href="/dashboard"
-        aria-label="Merchant sign in"
-        className=" grid size-14 shrink-0 place-items-center rounded-full bg-ink text-white transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink lg:ml-6"
-      >
-        <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4.5 21a7.5 7.5 0 0 1 15 0" strokeLinecap="round" />
-        </svg>
-      </Link>
+    
     </header>
   );
 }
