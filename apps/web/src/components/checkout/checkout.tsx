@@ -6,6 +6,7 @@ import type { EIP1193Provider } from "viem";
 import { BridgeChain, type BridgeResult } from "@circle-fin/app-kit";
 import type { ArcNetwork } from "@jupa/shared";
 import { useCircleSdk, type CircleAuth } from "@/lib/circle-web";
+import { useWalletEnvironment, walletDeepLinks, withPendingWalletAction } from "@/lib/mobile-wallets";
 
 type ChargeView = {
   id: string;
@@ -107,6 +108,12 @@ export function Checkout({
   const recoveryRef = useRef<BridgeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const env = useWalletEnvironment();
+  // WalletConnect never brings the wallet app forward on a phone; we show a tap-to-open button.
+  const [pendingWallet, setPendingWallet] = useState<string | null>(null);
+  const [walletConnectPeer, setWalletConnectPeer] = useState<{ name: string; link: string | null } | null>(null);
+  const [useWalletConnect, setUseWalletConnect] = useState(false);
+  const walletConnectChainsRef = useRef<string[] | null>(null);
 
   useEffect(() => {
     if (charge.status === "paid") router.replace(`/receipt/${charge.id}`);
@@ -264,8 +271,11 @@ export function Checkout({
           if (/reject|cancel|close/i.test(detail)) throw new Error("Wallet connection was cancelled. Tap Connect wallet & review to try again.");
           throw new Error(`WalletConnect could not open a mobile wallet. ${detail}`);
         }
-        provider = walletConnect as EIP1193Provider;
-        setWalletName("WalletConnect");
+        const peer = walletConnect.session?.peer.metadata;
+        setWalletConnectPeer({ name: peer?.name ?? "your wallet", link: peer?.redirect?.native ?? peer?.redirect?.universal ?? null });
+        walletConnectChainsRef.current = walletConnect.session?.namespaces?.eip155?.chains ?? null;
+        provider = withPendingWalletAction(walletConnect as EIP1193Provider, setPendingWallet);
+        setWalletName(peer?.name ?? "WalletConnect");
       }
       providerRef.current = provider;
     }
@@ -274,6 +284,10 @@ export function Checkout({
     if (!accounts[0]) throw new Error("No wallet account was selected.");
     setWalletAddress(accounts[0]);
 
+    const approved = walletConnectChainsRef.current;
+    if (approved && !approved.includes(`eip155:${source.chainId}`)) {
+      throw new Error(`Your wallet didn't allow ${source.name} when it connected. Pick another network above, or disconnect Jupa in your wallet and connect again.`);
+    }
     const target = `0x${source.chainId!.toString(16)}`;
     const current = (await provider.request({ method: "eth_chainId" })) as string;
     if (current.toLowerCase() !== target.toLowerCase()) {
@@ -412,12 +426,14 @@ export function Checkout({
         ) : method === "external" ? (
           <div className="mt-6 space-y-4">
             <label className="block text-sm font-semibold" htmlFor="source-network">Pay USDC from</label>
-            <select id="source-network" value={source.chain} disabled={busy} onChange={(event) => { const next = sources.find((item) => item.chain === event.target.value); if (next) { setSource(next); setQuote(null); setWalletAddress(null); setWalletName(null); providerRef.current = null; } }} className="w-full rounded-2xl border-2 border-ink bg-white px-5 py-4 outline-none">
+            <select id="source-network" value={source.chain} disabled={busy} onChange={(event) => { const next = sources.find((item) => item.chain === event.target.value); if (next) { setSource(next); setQuote(null); setWalletAddress(null); setWalletName(null); providerRef.current = null; walletConnectChainsRef.current = null; setWalletConnectPeer(null); } }} className="w-full rounded-2xl border-2 border-ink bg-white px-5 py-4 outline-none">
               {sources.map((item) => <option value={item.chain} key={item.chain}>{item.name}</option>)}
             </select>
             {walletAddress && <p className="text-sm text-muted">{walletName ?? "Wallet"} · {walletAddress.slice(0, 7)}…{walletAddress.slice(-5)}</p>}
             {source.family === "solana" && walletName && <p className="text-sm text-muted">{walletName} connected. SOL is required for source-chain network fees.</p>}
-            {quote ? (
+            {env.mobile && !hasInjectedWallet(source.family, env) && !useWalletConnect && !walletName ? (
+              <OpenInWallet family={source.family} onWalletConnect={source.family === "evm" && walletConnectProjectId ? () => setUseWalletConnect(true) : undefined} />
+            ) : quote ? (
               <div className="space-y-4">
                 <div className="rounded-2xl bg-canvas p-5 text-sm"><div className="flex justify-between"><span className="text-muted">Merchant receives</span><strong>{charge.amountLabel}</strong></div><div className="mt-2 flex justify-between"><span className="text-muted">Bridge and forwarding fee</span><strong>{quote.fee} USDC</strong></div><div className="mt-2 flex justify-between border-t border-line pt-2"><span>Total wallet debit</span><strong>{quote.total} USDC + gas</strong></div></div>
                 <button type="button" disabled={busy} onClick={payExternal} className="w-full rounded-2xl bg-ink px-5 py-4 text-lg font-semibold text-white disabled:opacity-60">{busy ? "Payment in progress…" : `Confirm ${quote.total} USDC`}</button>
@@ -454,11 +470,49 @@ export function Checkout({
           </div>
         )}
 
+        {pendingWallet && walletConnectPeer && (
+          <div role="status" className="mt-5 rounded-2xl bg-mint p-4 text-mint-ink">
+            <p className="font-semibold">Approve in {walletConnectPeer.name}</p>
+            <p className="mt-1 text-sm">Your wallet is waiting for you. Open it, approve, then come back here.</p>
+            {walletConnectPeer.link && (
+              <a href={walletConnectPeer.link} className="mt-3 grid min-h-12 place-items-center rounded-xl bg-ink px-5 font-semibold text-white">
+                Open {walletConnectPeer.name}
+              </a>
+            )}
+          </div>
+        )}
+
         {(message || circle.error || circle.socialError) && (
           <p role="status" className="mt-5 rounded-2xl bg-coral/20 p-4 text-sm">{message ?? circle.socialError ?? circle.error}</p>
         )}
         </div>
       </section>
     </main>
+  );
+}
+
+function hasInjectedWallet(family: "evm" | "solana", env: { injectedEvm: boolean; injectedSolana: boolean }) {
+  return family === "evm" ? env.injectedEvm : env.injectedSolana;
+}
+
+/** On a phone with no wallet in the page: reopen this checkout inside a wallet app's browser. */
+function OpenInWallet({ family, onWalletConnect }: { family: "evm" | "solana"; onWalletConnect?: () => void }) {
+  const href = typeof window === "undefined" ? "" : window.location.href;
+  const wallets = href ? walletDeepLinks(family, href) : [];
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold">Open this payment in your wallet app</p>
+      {wallets.map((w) => (
+        <a key={w.id} href={w.href} className="grid min-h-14 place-items-center rounded-2xl bg-ink px-5 text-lg font-semibold text-white">
+          Open in {w.name}
+        </a>
+      ))}
+      {onWalletConnect && (
+        <button type="button" onClick={onWalletConnect} className="w-full rounded-2xl border border-line px-5 py-4 font-semibold">
+          Use another wallet
+        </button>
+      )}
+      <p className="text-xs leading-relaxed text-muted">Your wallet opens this same page. Approvals appear right there, so you don&apos;t need to switch apps.</p>
+    </div>
   );
 }
