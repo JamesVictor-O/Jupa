@@ -30,6 +30,23 @@ export function circleErrorCode(err: unknown): number | undefined {
   return e?.response?.data?.code ?? (typeof e?.code === "number" ? e.code : undefined);
 }
 
+/** Safe provider diagnostics for server logs. Never includes request headers or tokens. */
+export function circleErrorDetails(err: unknown) {
+  const e = err as {
+    name?: string;
+    message?: string;
+    status?: number;
+    response?: { status?: number; data?: { code?: number } };
+    code?: number;
+  };
+  return {
+    name: e?.name ?? "Error",
+    status: e?.status ?? e?.response?.status ?? null,
+    code: circleErrorCode(err) ?? null,
+    message: e?.message ?? "Unknown Circle error",
+  };
+}
+
 /**
  * Verify a Circle userToken by asking Circle who it belongs to.
  * Returns the Circle user id, or null if the token is invalid or expired.

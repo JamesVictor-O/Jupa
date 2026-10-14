@@ -24,6 +24,10 @@ pnpm dev:all                         # web + payment indexer
 pnpm test                            # vitest + forge test
 ```
 
+For Vercel with Supabase, set `DATABASE_URL` to the Supabase transaction-pooler
+URI (port 6543). Set `DIRECT_URL` locally or in CI to the direct/session URI for
+`pnpm db:push`; do not expose either variable to browser code.
+
 Deploy the registry:
 
 ```bash

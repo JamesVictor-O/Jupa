@@ -121,7 +121,10 @@ export function useCircleSdk(appId: string | undefined, googleClientId?: string)
         body: JSON.stringify({ email, deviceId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "We couldn't send a code. Try again.");
+      if (!res.ok) {
+        const reference = data.requestId ? ` Reference: ${data.requestId}` : "";
+        throw new Error(`${data.error ?? "We couldn't send a code. Try again."}${reference}`);
+      }
 
       return new Promise<CircleAuth>((resolve, reject) => {
         onLogin.current = (err, result) => {
