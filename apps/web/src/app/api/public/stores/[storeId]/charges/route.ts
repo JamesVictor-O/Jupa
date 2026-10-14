@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/public/stor
   try {
     amount = parseUsd(body.amount);
   } catch {
-    return NextResponse.json({ error: "Enter a valid amount, such as 12.50." }, { status: 400 });
+    return NextResponse.json({ error: "Enter a valid amount, such as 12.50 or 0.021." }, { status: 400 });
   }
   if (amount <= 0n) return NextResponse.json({ error: "Amount must be more than zero." }, { status: 400 });
 

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     amount = parseUsd(body.amount);
   } catch {
-    return NextResponse.json({ error: "That amount isn't valid. Use dollars and cents, like 12.50." }, { status: 400 });
+    return NextResponse.json({ error: "That amount isn't valid. Use up to 6 decimals, like 12.50 or 0.021." }, { status: 400 });
   }
   if (amount <= 0n) return NextResponse.json({ error: "Amount must be more than zero." }, { status: 400 });
 

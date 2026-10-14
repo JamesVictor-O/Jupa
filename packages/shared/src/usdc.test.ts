@@ -12,9 +12,22 @@ describe("usdc amounts", () => {
   it("parses and formats", () => {
     expect(parseUsd("12.5")).toBe(12_500_000n);
     expect(formatUsd(1_234_500_000n)).toBe("$1,234.50");
+    expect(formatUsd(21_000n)).toBe("$0.021");
+    expect(formatUsd(1n)).toBe("$0.000001");
+    expect(formatUsd(0n)).toBe("$0.00");
+    expect(formatUsd(4_500_000n)).toBe("$4.50");
   });
   it("rejects sub-cent and junk input", () => {
-    expect(() => parseUsd("1.234")).toThrow();
+    expect(parseUsd("1.234")).toBe(1_234_000n);
+    expect(parseUsd("0.021")).toBe(21_000n);
+    expect(parseUsd("$1,234.5")).toBe(1_234_500_000n);
+    expect(parseUsd(".5")).toBe(500_000n);
+    expect(parseUsd("05.00")).toBe(5_000_000n);
+    expect(parseUsd("0")).toBe(0n);
+    expect(() => parseUsd("1.2.3")).toThrow();
+    expect(() => parseUsd("")).toThrow();
+    expect(() => parseUsd("0.0000001")).toThrow();
+    expect(() => parseUsd("-1")).toThrow();
     expect(() => parseUsd("abc")).toThrow();
   });
 });
