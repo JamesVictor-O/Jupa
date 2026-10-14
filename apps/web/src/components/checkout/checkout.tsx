@@ -81,11 +81,13 @@ export function Checkout({
   arcNetwork,
   circleAppId,
   googleClientId,
+  walletConnectProjectId,
 }: {
   charge: ChargeView;
   arcNetwork: ArcNetwork;
   circleAppId?: string;
   googleClientId?: string;
+  walletConnectProjectId?: string;
 }) {
   const router = useRouter();
   const circle = useCircleSdk(circleAppId, googleClientId);
@@ -220,10 +222,34 @@ export function Checkout({
     if (!provider) {
       const wallets = await discoverWallets();
       const selected = wallets[0];
-      if (!selected) throw new Error("Install or open an EVM wallet such as MetaMask or Coinbase Wallet.");
-      provider = selected.provider;
+      if (selected) {
+        provider = selected.provider;
+        setWalletName(selected.info.name);
+      } else {
+        if (!walletConnectProjectId) {
+          throw new Error("Mobile wallet connection is not configured yet. Open this page inside your wallet app or try again later.");
+        }
+        const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
+        const evmSources = sources.filter((item): item is SourceNetwork & { chainId: number } => item.family === "evm" && item.chainId !== undefined);
+        const chainIds = evmSources.map((item) => item.chainId) as [number, ...number[]];
+        const rpcMap = Object.fromEntries(evmSources.map((item) => [item.chainId, item.rpc]));
+        const walletConnect = await EthereumProvider.init({
+          projectId: walletConnectProjectId,
+          optionalChains: chainIds,
+          rpcMap,
+          showQrModal: true,
+          metadata: {
+            name: "Jupa",
+            description: "Pay merchants with USDC from your wallet",
+            url: window.location.origin,
+            icons: [`${window.location.origin}/favicon.ico`],
+          },
+        });
+        await walletConnect.enable();
+        provider = walletConnect as EIP1193Provider;
+        setWalletName("WalletConnect");
+      }
       providerRef.current = provider;
-      setWalletName(selected.info.name);
     }
     const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
     if (!accounts[0]) throw new Error("No wallet account was selected.");

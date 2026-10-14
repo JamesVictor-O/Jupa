@@ -17,6 +17,8 @@
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@jupa/db": "workspace:*",
     "@jupa/shared": "workspace:*",
+    "@reown/appkit": "^1.8.24",
+    "@walletconnect/ethereum-provider": "^2.26.0",
     "next": "16.3.8",
     "qrcode.react": "^4",
     "react": "19.2.8",
