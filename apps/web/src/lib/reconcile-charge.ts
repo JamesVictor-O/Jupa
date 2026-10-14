@@ -23,7 +23,16 @@ async function reconcile(chargeId: string) {
   const factory = process.env.CROSSCHAIN_PAYMENT_FACTORY_ADDRESS;
   const registry = process.env.STORE_REGISTRY_ADDRESS;
   const relayerKey = process.env.RELAYER_PRIVATE_KEY as Hex | undefined;
-  if (!factory || !registry || !relayerKey || !isAddress(factory) || !isAddress(registry)) return;
+  if (!factory || !registry || !relayerKey || !isAddress(factory) || !isAddress(registry)) {
+    // Without these, paid cross-chain charges stay "paying" forever; make that loud.
+    const missing = [
+      !factory || !isAddress(factory) ? "CROSSCHAIN_PAYMENT_FACTORY_ADDRESS" : null,
+      !registry || !isAddress(registry) ? "STORE_REGISTRY_ADDRESS" : null,
+      !relayerKey ? "RELAYER_PRIVATE_KEY" : null,
+    ].filter(Boolean);
+    console.error(`[settle] cannot settle ${chargeId}: missing or invalid ${missing.join(", ")}`);
+    return;
+  }
 
   const [record] = await db
     .select({
@@ -56,12 +65,19 @@ async function reconcile(chargeId: string) {
   let hash: Hex;
   try {
     hash = await wallet.writeContract({ address: factory, abi: crosschainPaymentFactoryAbi, functionName: "settle", args: [storeId, chargeRef] });
-  } catch {
-    // Another request or the standalone indexer may have won the settlement race.
+  } catch (error) {
+    // Usually another request or the indexer won the settlement race; anything else must be visible.
+    const left = await client
+      .readContract({ address: arc.usdc, abi: erc20Abi, functionName: "balanceOf", args: [receiver] })
+      .catch(() => null);
+    if (left !== 0n) console.error(`[settle] settle() failed for ${chargeId}`, error instanceof Error ? error.message : error);
     return;
   }
   const receipt = await client.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") return;
+  if (receipt.status !== "success") {
+    console.error(`[settle] settle() reverted for ${chargeId} in ${hash}`);
+    return;
+  }
 
   const parsed = receipt.logs.flatMap((log) => {
     try {
@@ -74,7 +90,10 @@ async function reconcile(chargeId: string) {
   if (!parsed || parsed.storeId !== storeId || parsed.chargeRef !== chargeRef) return;
 
   const registeredPayout = await client.readContract({ address: registry, abi: storeRegistryAbi, functionName: "payoutOf", args: [storeId] });
-  if (registeredPayout.toLowerCase() !== (parsed.payout as Address).toLowerCase()) return;
+  if (registeredPayout.toLowerCase() !== (parsed.payout as Address).toLowerCase()) {
+    console.error(`[settle] ${chargeId} settled to ${parsed.payout}, but the registry payout is ${registeredPayout}; not marking Paid`);
+    return;
+  }
 
   const finalizedAt = new Date();
   await db.transaction(async (tx) => {
