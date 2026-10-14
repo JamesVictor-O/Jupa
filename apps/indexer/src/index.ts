@@ -147,7 +147,7 @@ client.watchContractEvent({
   abi: storeRegistryAbi,
   eventName: "ChargePaid",
   poll: true,
-  pollingInterval: 1_000,
+  pollingInterval: 5_000,
   onLogs: (logs) => processLogs(logs, "direct"),
   onError: (err) => console.error("[indexer] watch error", err),
 });
@@ -158,7 +158,7 @@ if (factory) {
     abi: crosschainPaymentFactoryAbi,
     eventName: "CrosschainChargePaid",
     poll: true,
-    pollingInterval: 1_000,
+    pollingInterval: 5_000,
     onLogs: (logs) => processLogs(logs, "crosschain"),
     onError: (err) => console.error("[indexer] crosschain watch error", err),
   });
@@ -169,16 +169,59 @@ if (factory) {
 const head = await client.getBlockNumber();
 const configuredStart = process.env.STORE_REGISTRY_DEPLOYMENT_BLOCK;
 const fromBlock = configuredStart ? BigInt(configuredStart) : head > 10_000n ? head - 10_000n : 0n;
+
+// Arc's public RPC limits eth_getLogs ranges. Replay in bounded windows so a
+// restart can always recover payments that landed while the indexer was down.
+async function replayInChunks({
+  address,
+  eventName,
+  start,
+  end,
+  origin,
+}: {
+  address: Address;
+  eventName: "ChargePaid" | "CrosschainChargePaid";
+  start: bigint;
+  end: bigint;
+  origin: "direct" | "crosschain";
+}) {
+  const chunkSize = 500n;
+  let replayed = 0;
+  for (let chunkStart = start; chunkStart <= end; chunkStart += chunkSize) {
+    const chunkEnd = chunkStart + chunkSize - 1n > end ? end : chunkStart + chunkSize - 1n;
+    let logs: Parameters<typeof processLogs>[0] | undefined;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        logs = await client.getContractEvents({
+          address,
+          abi: eventName === "ChargePaid" ? storeRegistryAbi : crosschainPaymentFactoryAbi,
+          eventName,
+          fromBlock: chunkStart,
+          toBlock: chunkEnd,
+        });
+        break;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
+      }
+    }
+    if (!logs) continue;
+    await processLogs(logs, origin);
+    replayed += logs.length;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return replayed;
+}
+
 try {
-  const historical = await client.getContractEvents({
+  const replayed = await replayInChunks({
     address: registry,
-    abi: storeRegistryAbi,
     eventName: "ChargePaid",
-    fromBlock,
-    toBlock: head,
+    start: fromBlock,
+    end: head,
+    origin: "direct",
   });
-  await processLogs(historical, "direct");
-  console.log(`[indexer] replayed ${historical.length} payment event(s) from block ${fromBlock}`);
+  console.log(`[indexer] replayed ${replayed} payment event(s) from block ${fromBlock}`);
 } catch (error) {
   console.error("[indexer] historical replay failed; live watcher remains active", error);
 }
@@ -188,15 +231,14 @@ if (factory) {
   const crosschainStart = process.env.CROSSCHAIN_FACTORY_DEPLOYMENT_BLOCK;
   const crosschainFrom = crosschainStart ? BigInt(crosschainStart) : crosschainHead > 10_000n ? crosschainHead - 10_000n : 0n;
   try {
-    const historical = await client.getContractEvents({
+    const replayed = await replayInChunks({
       address: factory,
-      abi: crosschainPaymentFactoryAbi,
       eventName: "CrosschainChargePaid",
-      fromBlock: crosschainFrom,
-      toBlock: crosschainHead,
+      start: crosschainFrom,
+      end: crosschainHead,
+      origin: "crosschain",
     });
-    await processLogs(historical, "crosschain");
-    console.log(`[indexer] replayed ${historical.length} crosschain event(s) from block ${crosschainFrom}`);
+    console.log(`[indexer] replayed ${replayed} crosschain event(s) from block ${crosschainFrom}`);
   } catch (error) {
     console.error("[indexer] crosschain replay failed; live watcher remains active", error);
   }

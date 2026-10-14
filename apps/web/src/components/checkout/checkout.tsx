@@ -82,12 +82,14 @@ export function Checkout({
   circleAppId,
   googleClientId,
   walletConnectProjectId,
+  embedded = false,
 }: {
   charge: ChargeView;
   arcNetwork: ArcNetwork;
   circleAppId?: string;
   googleClientId?: string;
   walletConnectProjectId?: string;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const circle = useCircleSdk(circleAppId, googleClientId);
@@ -364,15 +366,22 @@ export function Checkout({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6 py-12">
-      <section className="rounded-[2rem] bg-white p-7 shadow-float sm:p-10">
+    <main className={`flex w-full items-center px-4 py-5 sm:px-6 lg:px-8 lg:py-6 ${embedded ? "min-h-[calc(100svh-5rem)] lg:min-h-svh" : "min-h-svh"}`}>
+      <section className="mx-auto grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-white shadow-float lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="bg-canvas p-6 sm:p-8 lg:flex lg:flex-col lg:justify-between lg:p-10">
+          <div>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">Pay {charge.storeName}</p>
         <h1 className="mt-3 text-5xl font-semibold tracking-[-0.06em]">{charge.amountLabel}</h1>
-        <dl className="mt-7 grid gap-3 rounded-2xl bg-canvas p-5 text-sm">
+        <dl className="mt-7 grid gap-3 rounded-2xl bg-white p-5 text-sm">
           <div className="flex justify-between gap-5"><dt className="text-muted">Asset</dt><dd className="font-semibold">USDC</dd></div>
           <div className="flex justify-between gap-5"><dt className="text-muted">Network</dt><dd className="font-semibold">{charge.network}</dd></div>
           <div className="flex justify-between gap-5"><dt className="text-muted">Recipient</dt><dd className="max-w-48 truncate font-mono text-xs">{charge.payoutAddress}</dd></div>
         </dl>
+          </div>
+          <p className="mt-6 break-all text-xs leading-relaxed text-muted">Charge {charge.id}<br />Expires {new Date(charge.expiresAt).toLocaleTimeString()}</p>
+        </div>
+
+        <div className="p-6 sm:p-8 lg:p-10">
 
         {!unavailable && (
           <div className="mt-6 grid grid-cols-2 rounded-2xl bg-canvas p-1">
@@ -384,7 +393,7 @@ export function Checkout({
         {unavailable ? (
           <p className="mt-6 rounded-2xl bg-coral/25 p-4">This payment request is no longer available.</p>
         ) : method === "external" ? (
-          <div className="mt-7 space-y-4">
+          <div className="mt-6 space-y-4">
             <label className="block text-sm font-semibold" htmlFor="source-network">Pay USDC from</label>
             <select id="source-network" value={source.chain} disabled={busy} onChange={(event) => { const next = sources.find((item) => item.chain === event.target.value); if (next) { setSource(next); setQuote(null); setWalletAddress(null); setWalletName(null); providerRef.current = null; } }} className="w-full rounded-2xl border-2 border-ink bg-white px-5 py-4 outline-none">
               {sources.map((item) => <option value={item.chain} key={item.chain}>{item.name}</option>)}
@@ -403,7 +412,7 @@ export function Checkout({
             <p className="text-xs leading-relaxed text-muted">Circle CCTP moves USDC to a unique Arc receiver for this charge. It can only forward funds to the merchant’s registered payout address.</p>
           </div>
         ) : !(auth ?? circle.socialAuth) ? (
-          <div className="mt-7 space-y-4">
+          <div className="mt-6 space-y-4">
             <button
               type="button"
               disabled={!circle.ready || busy}
@@ -420,7 +429,7 @@ export function Checkout({
             </form>
           </div>
         ) : (
-          <div className="mt-7">
+          <div className="mt-6">
             <p className="mb-4 text-sm text-muted">You will approve the exact amount above, then confirm the payment. Jupa cannot change the amount or recipient.</p>
             <button type="button" disabled={busy} onClick={pay} className="w-full rounded-2xl bg-ink px-5 py-4 text-lg font-semibold text-white disabled:opacity-60">
               {busy ? "Payment in progress…" : `Pay ${charge.amountLabel}`}
@@ -431,8 +440,8 @@ export function Checkout({
         {(message || circle.error || circle.socialError) && (
           <p role="status" className="mt-5 rounded-2xl bg-coral/20 p-4 text-sm">{message ?? circle.socialError ?? circle.error}</p>
         )}
+        </div>
       </section>
-      <p className="mt-5 text-center text-xs text-muted">Charge {charge.id} · Expires {new Date(charge.expiresAt).toLocaleTimeString()}</p>
     </main>
   );
 }

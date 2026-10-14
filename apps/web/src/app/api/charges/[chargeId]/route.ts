@@ -2,12 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { and, charges, eq, stores } from "@jupa/db";
 import { db } from "@/lib/db";
 import { currentMerchant } from "@/lib/session";
+import { reconcileCrosschainCharge } from "@/lib/reconcile-charge";
 
 /** Till and checkout poll this; a dropped connection just reloads status from here. */
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/charges/[chargeId]">) {
   const { chargeId } = await ctx.params;
   let charge = await db.query.charges.findFirst({ where: eq(charges.id, chargeId) });
   if (!charge) return NextResponse.json({ error: "Charge not found." }, { status: 404 });
+  if (charge.status === "paying") {
+    await reconcileCrosschainCharge(charge.id);
+    charge = await db.query.charges.findFirst({ where: eq(charges.id, chargeId) }) ?? charge;
+  }
   if (charge.status === "created" && charge.expiresAt <= new Date()) {
     [charge] = await db.update(charges).set({ status: "expired" }).where(eq(charges.id, charge.id)).returning();
   }

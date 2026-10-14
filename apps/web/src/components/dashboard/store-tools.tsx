@@ -30,7 +30,7 @@ export function StoreTools({ storeId, storeName, registryStatus }: { storeId: st
 
       <div id="print-poster" className="rounded-3xl bg-surface p-6 text-center shadow-pill">
         <div className="flex items-center justify-between text-left">
-          <div><h2 className="font-bold">Get paid</h2><p className="mt-1 text-sm text-muted">Your always-on payment QR.</p></div>
+          <div><h2 className="font-bold">Get paid</h2><p className="mt-1 text-sm text-muted">Customers scan, enter an amount and pay.</p></div>
           <span className={`size-2.5 rounded-full ${ready ? "bg-mint-strong" : "bg-coral"}`} title={ready ? "Ready" : "Setup required"} />
         </div>
         <div className="mx-auto mt-6 w-fit rounded-2xl bg-white p-3 ring-1 ring-line">

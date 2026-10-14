@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { bridgeAttempts, charges, eq, payments, stores } from "@jupa/db";
 import { arcTxUrl, formatUsd } from "@jupa/shared";
 import { RenewCharge } from "@/components/receipt/renew-charge";
+import { MerchantShell } from "@/components/dashboard/merchant-shell";
 import { db } from "@/lib/db";
 import { arc } from "@/lib/env";
 import { currentMerchant } from "@/lib/session";
@@ -24,6 +25,7 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
       late: charges.late,
       overpaid: charges.overpaid,
       storeName: stores.name,
+      logoUrl: stores.logoUrl,
       amountReceived: payments.amountReceived,
       finalizedAt: payments.finalizedAt,
       sourceChain: payments.sourceChain,
@@ -45,9 +47,11 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
   const expired = record.status === "expired" || (record.status === "created" && record.expiresAt <= new Date());
   const status = expired ? "expired" : record.status;
   const merchantOwnsCharge = merchant?.id === record.merchantId;
-  return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6 py-12">
-      <section className="rounded-[2rem] bg-white p-8 shadow-float sm:p-10">
+  const content = (
+    <main className="flex min-h-[calc(100svh-5rem)] w-full items-center px-4 py-5 sm:px-6 lg:min-h-svh lg:px-8 lg:py-6">
+      <section className="mx-auto grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-white shadow-float lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="flex flex-col justify-between p-6 sm:p-8 lg:p-10">
+          <div>
         <div className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${paid ? "bg-mint text-mint-ink" : "bg-coral/25"}`}>
           {paid ? "Payment complete" : expired ? "Payment expired" : record.status === "needs_attention" ? "Payment needs attention" : "Payment pending"}
         </div>
@@ -55,8 +59,21 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
           {formatUsd(record.amountReceived ?? record.charged)}
         </h1>
         <p className="mt-2 text-lg text-muted">{record.storeName}</p>
+          </div>
 
-        <dl className="mt-8 divide-y divide-line rounded-2xl bg-canvas px-5 text-sm">
+          <div className="mt-8 space-y-4">
+            {(record.late || record.overpaid) && <p className="rounded-2xl bg-coral/20 p-4 text-sm">{record.late ? "This payment arrived after the request expired. " : ""}{record.overpaid ? "The amount received was greater than requested." : ""}</p>}
+            {expired && merchantOwnsCharge && <RenewCharge storeId={record.storeId} storeName={record.storeName} amount={record.charged.toString()} amountLabel={formatUsd(record.charged)} />}
+            {expired && !merchantOwnsCharge && <p className="rounded-2xl bg-coral/20 p-4 text-sm">This payment QR has expired. Ask the merchant to create a fresh one before paying.</p>}
+            {record.arcTxHash && (
+              <a href={arcTxUrl(arc, record.arcTxHash)} target="_blank" rel="noreferrer" className="block w-full rounded-2xl border border-line px-5 py-4 text-center font-semibold">View on Arc explorer ↗</a>
+            )}
+            {!paid && !expired && record.status !== "needs_attention" && <Link href={`/pay/${record.id}`} className="block min-h-11 py-3 text-center text-sm font-semibold underline underline-offset-4">Return to payment</Link>}
+          </div>
+        </div>
+
+        <div className="bg-canvas p-5 sm:p-7 lg:flex lg:items-center lg:p-10">
+        <dl className="w-full divide-y divide-line rounded-2xl bg-white px-5 text-sm">
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Status</dt><dd className="font-semibold capitalize">{status.replace("_", " ")}</dd></div>
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Asset</dt><dd className="font-semibold">USDC</dd></div>
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">{record.sourceChain === "arc" ? "Paid from" : "Reported source"}</dt><dd className="font-semibold">{record.sourceChain === "arc" ? (arc.network === "mainnet" ? "Arc" : "Arc testnet") : record.reportedSourceChain?.replaceAll("_", " ") ?? "—"}</dd></div>
@@ -64,15 +81,11 @@ export default async function ReceiptPage(props: PageProps<"/receipt/[chargeId]"
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Time</dt><dd className="font-semibold">{(record.finalizedAt ?? record.createdAt).toLocaleString()}</dd></div>
           <div className="flex justify-between gap-4 py-4"><dt className="text-muted">Reference</dt><dd className="font-mono text-xs">{record.id}</dd></div>
         </dl>
-
-        {(record.late || record.overpaid) && <p className="mt-5 rounded-2xl bg-coral/20 p-4 text-sm">{record.late ? "This payment arrived after the request expired. " : ""}{record.overpaid ? "The amount received was greater than requested." : ""}</p>}
-        {expired && merchantOwnsCharge && <RenewCharge storeId={record.storeId} storeName={record.storeName} amount={record.charged.toString()} amountLabel={formatUsd(record.charged)} />}
-        {expired && !merchantOwnsCharge && <p className="mt-5 rounded-2xl bg-coral/20 p-4 text-sm">This payment QR has expired. Ask the merchant to create a fresh one before paying.</p>}
-        {record.arcTxHash && (
-          <a href={arcTxUrl(arc, record.arcTxHash)} target="_blank" rel="noreferrer" className="mt-6 block w-full rounded-2xl border border-line px-5 py-4 text-center font-semibold">View on Arc explorer ↗</a>
-        )}
-        {!paid && !expired && record.status !== "needs_attention" && <Link href={`/pay/${record.id}`} className="mt-4 block text-center text-sm font-semibold underline">Return to payment</Link>}
+        </div>
       </section>
     </main>
   );
+
+  if (!merchantOwnsCharge) return content;
+  return <MerchantShell store={{ id: record.storeId, name: record.storeName, logoUrl: record.logoUrl }} active="home">{content}</MerchantShell>;
 }
