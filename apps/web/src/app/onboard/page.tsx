@@ -17,7 +17,7 @@ export default async function OnboardPage() {
 
   return (
     <Onboarding
-      circleAppId={process.env.NEXT_PUBLIC_CIRCLE_APP_ID}
+      circleAppId={process.env.CIRCLE_APP_ID}
       googleClientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
       signedIn={Boolean(merchant)}
       email={merchant?.email ?? null}
